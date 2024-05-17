@@ -1,36 +1,50 @@
-import streamlit as st
-import pickle
+import pandas as pd
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score
 
-# Modelleri ve scaler'ı yükleme
-with open('best_model.pkl', 'rb') as f:
-    model = pickle.load(f)
+# Titanic veri setini yükleme
+url = "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
+df = pd.read_csv(url)
 
-with open('scaler.pkl', 'rb') as f:
-    scaler = pickle.load(f)
+# Veri ön işleme
+# Null değerleri doldurma ve gereksiz sütunları kaldırma
+df.drop(['PassengerId', 'Name', 'Ticket', 'Cabin'], axis=1, inplace=True)
+df['Age'].fillna(df['Age'].median(), inplace=True)
+df['Embarked'].fillna(df['Embarked'].mode()[0], inplace=True)
 
-with open('pca.pkl', 'rb') as f:
-    pca = pickle.load(f)
+# Kategorik değişkenleri kodlama
+df = pd.get_dummies(df, columns=['Sex', 'Embarked'], drop_first=True)
 
-# Streamlit uygulaması
-st.title('Wine Quality Prediction')
-fixed_acidity = st.slider('Fixed Acidity', 4.0, 16.0)
-volatile_acidity = st.slider('Volatile Acidity', 0.1, 1.5)
-citric_acid = st.slider('Citric Acid', 0.0, 1.0)
-residual_sugar = st.slider('Residual Sugar', 0.9, 15.5)
-chlorides = st.slider('Chlorides', 0.012, 0.611)
-free_sulfur_dioxide = st.slider('Free Sulfur Dioxide', 1.0, 72.0)
-total_sulfur_dioxide = st.slider('Total Sulfur Dioxide', 6.0, 289.0)
-density = st.slider('Density', 0.990, 1.004)
-pH = st.slider('pH', 2.74, 4.01)
-sulphates = st.slider('Sulphates', 0.33, 2.0)
-alcohol = st.slider('Alcohol', 8.4, 14.9)
+# Normalizasyon
+scaler = StandardScaler()
+X = scaler.fit_transform(df.drop('Survived', axis=1))
+y = df['Survived']
 
-input_data = np.array([[fixed_acidity, volatile_acidity, citric_acid, residual_sugar, chlorides, 
-                        free_sulfur_dioxide, total_sulfur_dioxide, density, pH, sulphates, alcohol]])
-input_data_scaled = scaler.transform(input_data)
-input_data_pca = pca.transform(input_data_scaled)
-prediction = model.predict(input_data_pca)
+# Özellik seçimi
+anova_selector = SelectKBest(score_func=f_classif, k=4)
+X_selected = anova_selector.fit_transform(X, y)
 
-st.write('Predicted Wine Quality:', prediction[0])
+# Eğitim ve test verisi olarak bölümleme
+X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.2, random_state=42)
 
+# Modelleme
+model = RandomForestClassifier()
+model.fit(X_train, y_train)
+
+# Tahmin
+y_pred = model.predict(X_test)
+
+# Model değerlendirme
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+conf_matrix = confusion_matrix(y_test, y_pred)
+
+print("Accuracy:", accuracy)
+print("Precision:", precision)
+print("Recall:", recall)
+print("Confusion Matrix:\n", conf_matrix)
